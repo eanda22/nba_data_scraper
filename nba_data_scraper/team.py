@@ -6,34 +6,58 @@ from io import StringIO
 import logging
 
 # Import from our own library files
-from .utils import get_data, BASE_URL
+from .utils import get_soup, convert_soup_to_dataframe, BASE_URL
 
 logger = logging.getLogger(__name__)
 
+
 class Team:
     """Represents a single team for a specific season."""
-    def __init__(self, team_abbr: str, year: int):
+
+    TEAM_URL = f"{BASE_URL}/teams/{{}}/{{}}.html"
+
+    def __init__(self, team_abbr, year):
         self.team_abbr = team_abbr.upper()
         self.year = year
-        self.url = f"{BASE_URL}/teams/{self.team_abbr}/{self.year}.html"
-        logger.debug(f"Initializing Team: {team_abbr} {year}")
-        self._tables, self._soup = get_data(self.url)
 
-        if self._tables is None and self._soup is None:
-            raise ValueError(f"Failed to get data for team: {team_abbr} in {year}")
+    def get_roster(self):
+        """
+        Fetches the roster for the team for the specified year
+        """
+        url = self.TEAM_URL.format(self.team_abbr, self.year)
+        logger.info(f"Fetching roster from: {url}")
 
-    def get_roster(self) -> Optional[pd.DataFrame]:
-        if self._soup:
-            roster_table = self._soup.find('table', id='roster')
-            if roster_table:
-                return pd.read_html(StringIO(str(roster_table)))[0]
-        logger.warning(f"Could not find roster table for {self.team_abbr} {self.year}.")
-        return None
+        soup = get_soup(url)
+        if not soup:
+            logger.error(f"No soup found at {url}.")
+            return None
 
-    def get_team_stats(self) -> Optional[pd.DataFrame]:
-        if self._soup:
-            stats_table = self._soup.find('table', id='team_stats')
-            if stats_table:
-                return pd.read_html(StringIO(str(stats_table)))[0]
-        logger.warning(f"Could not find team stats table for {self.team_abbr} {self.year}.")
-        return None
+        table_id = "roster"
+        roster_table = convert_soup_to_dataframe(soup, table_id)
+        if roster_table is None:
+            logger.warning(
+                f"No roster table found for {self.team_abbr} in {self.year}."
+            )
+            return None
+        return roster_table
+
+    def get_team_stats(self):
+        """
+        Fetches the team stats for the specified year
+        """
+        url = self.TEAM_URL.format(self.team_abbr, self.year)
+        logger.info(f"Fetching team stats from: {url}")
+
+        soup = get_soup(url)
+        if not soup:
+            logger.error(f"No soup found at {url}.")
+            return None
+
+        table_id = "per_game_stats"
+        stats_table = convert_soup_to_dataframe(soup, table_id)
+        if stats_table is None:
+            logger.warning(
+                f"No team stats table found for {self.team_abbr} in {self.year}."
+            )
+            return None
+        return stats_table
